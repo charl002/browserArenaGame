@@ -1,5 +1,5 @@
 # START GAME
 
-- run: 
+run: 
 - npm install
 - npm start
