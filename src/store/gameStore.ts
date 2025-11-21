@@ -29,10 +29,10 @@ interface GameState {
 
 
     statusEffects: {
-        player: { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear'; duration: number; startTime: number }[];
-        enemies: Record<string, { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear'; duration: number; startTime: number }[]>;
+        player: { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear' | 'corruption'; duration: number; startTime: number }[];
+        enemies: Record<string, { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear' | 'corruption'; duration: number; startTime: number }[]>;
     };
-    applyStatusEffect: (targetId: string, effect: { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear'; duration: number; startTime: number }) => void;
+    applyStatusEffect: (targetId: string, effect: { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear' | 'corruption'; duration: number; startTime: number }) => void;
     removeStatusEffect: (targetId: string, effectId: string) => void;
 
     resetMatch: () => void;
@@ -49,6 +49,9 @@ interface GameState {
 
     damagePlayer: (amount: number) => void;
     damageTarget: (amount: number) => void;
+
+    applyDot: (targetId: string, dot: { id: string, damage: number, duration: number, type?: string }) => void;
+    startChannel: (abilityName: string, duration: number, onTick: () => void, onComplete: () => void) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -230,6 +233,55 @@ export const useGameStore = create<GameState>((set, get) => ({
         setTimeout(() => {
             get().removeStatusEffect(targetId, effect.id);
         }, effect.duration * 1000);
+    },
+
+    applyDot: (targetId, dot) => {
+        // Simple interval based DOT
+        let ticks = 0;
+        const interval = setInterval(() => {
+            ticks++;
+            if (targetId === 'player') {
+                get().damagePlayer(dot.damage);
+            } else {
+                get().damageEnemy(targetId, dot.damage);
+            }
+
+            if (ticks >= dot.duration) {
+                clearInterval(interval);
+            }
+        }, 1000);
+
+        // Add visual status effect if type is provided
+        if (dot.type) {
+            get().applyStatusEffect(targetId, {
+                id: dot.id,
+                type: dot.type as any,
+                duration: dot.duration,
+                startTime: Date.now()
+            });
+        }
+    },
+
+    startChannel: (abilityName, duration, onTick, onComplete) => {
+        set({ casting: { abilityName, startTime: Date.now(), duration, onComplete } });
+
+        let ticks = 0;
+        const interval = setInterval(() => {
+            ticks++;
+            if (onTick) onTick();
+            if (ticks >= duration) {
+                clearInterval(interval);
+            }
+        }, 1000);
+
+        setTimeout(() => {
+            const state = get();
+            if (state.casting && state.casting.abilityName === abilityName) {
+                if (state.casting.onComplete) state.casting.onComplete();
+                set({ casting: null });
+                clearInterval(interval); // Ensure interval stops if cast finishes naturally
+            }
+        }, duration * 1000);
     },
 
     removeStatusEffect: (targetId, effectId) => set((state) => {

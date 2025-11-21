@@ -25,6 +25,8 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
     const isStunned = myEffects.some(e => e.type === 'stun');
     const isFeared = myEffects.some(e => e.type === 'fear');
     const isRooted = myEffects.some(e => e.type === 'root');
+    const isSlowed = myEffects.some(e => e.type === 'slow');
+    const isCorrupted = myEffects.some(e => e.type === 'corruption');
 
     useEffect(() => {
         if (classDef) {
@@ -53,6 +55,7 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
         const _isStunned = currentEffects.some(e => e.type === 'stun');
         const _isFeared = currentEffects.some(e => e.type === 'fear');
         const _isRooted = currentEffects.some(e => e.type === 'root');
+        const _isSlowed = currentEffects.some(e => e.type === 'slow');
 
         if (_isStunned || _isPolymorphed || _isRooted) {
             body.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -71,7 +74,8 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
                     .subVectors(myPosVec, player.position) // Away from player
                     .normalize();
 
-                const speed = 6; // Run fast!
+                let speed = 6; // Run fast!
+                if (_isSlowed) speed *= 0.5;
                 body.current.setLinvel({ x: direction.x * speed, y: body.current.linvel().y, z: direction.z * speed }, true);
             }
             return; // Skip normal AI
@@ -112,7 +116,8 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
 
             if (closestTarget.dist > range) {
                 // Chase
-                const speed = 3;
+                let speed = 3;
+                if (_isSlowed) speed *= 0.5;
                 const linvel = body.current.linvel();
                 body.current.setLinvel({ x: direction.x * speed, y: linvel.y, z: direction.z * speed }, true);
             } else {
@@ -156,6 +161,7 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
         if (flash) return "white";
         if (isTarget) return "red";
         if (hovered) return "orange";
+        if (isSlowed) return "cyan"; // Visual for slow
         switch (characterClass) {
             case 'Warrior': return '#8B4513'; // Brown
             case 'Mage': return '#4169E1'; // Royal Blue
@@ -179,6 +185,13 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
             >
                 <boxGeometry args={[1, 2, 1]} />
                 <meshStandardMaterial color={getColor()} />
+                {/* Corruption Visual */}
+                {isCorrupted && (
+                    <mesh position={[0, -0.9, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                        <ringGeometry args={[0.8, 1.2, 32]} />
+                        <meshBasicMaterial color="purple" transparent opacity={0.7} side={THREE.DoubleSide} />
+                    </mesh>
+                )}
                 <Html position={[0, 2.5, 0]} center>
                     <div style={{
                         background: 'rgba(0,0,0,0.5)',

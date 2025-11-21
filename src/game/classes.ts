@@ -5,7 +5,9 @@ export type Ability = {
     damage?: number;
     range?: number;
     cost?: number;
-    castTime?: number; // Added castTime
+    castTime?: number;
+    channelTime?: number; // Added channelTime
+    dot?: boolean; // Added dot
     icon?: string;
 };
 
@@ -49,11 +51,11 @@ export const Mage: CharacterClass = {
         resourceName: 'Mana',
     },
     abilities: {
-        action1: { id: 'fireball', name: 'Fireball', cooldown: 2, damage: 25, range: 30, castTime: 1.5 },
+        action1: { id: 'frostbolt', name: 'Frostbolt', cooldown: 2, damage: 20, range: 30, castTime: 1.5 },
         action2: { id: 'frost_nova', name: 'Frost Nova', cooldown: 15, damage: 5, range: 8 },
         action3: { id: 'blink', name: 'Blink', cooldown: 10, range: 20 },
         action4: { id: 'polymorph', name: 'Polymorph', cooldown: 20, range: 20, castTime: 1.5 },
-        action5: { id: 'pyroblast', name: 'Pyroblast', cooldown: 6, damage: 40, range: 30, castTime: 3.0 },
+        action5: { id: 'glacial_spike', name: 'Glacial Spike', cooldown: 6, damage: 60, range: 30, castTime: 3.0 },
     },
 };
 
@@ -66,9 +68,9 @@ export const Warlock: CharacterClass = {
     },
     abilities: {
         action1: { id: 'shadow_bolt', name: 'Shadow Bolt', cooldown: 2.5, damage: 20, range: 30, castTime: 1.5 },
-        action2: { id: 'corruption', name: 'Corruption', cooldown: 0, damage: 15, range: 30 },
+        action2: { id: 'corruption', name: 'Corruption', cooldown: 0, damage: 5, range: 30, dot: true },
         action3: { id: 'fear', name: 'Fear', cooldown: 15, range: 20, castTime: 1.5 },
-        action4: { id: 'life_drain', name: 'Life Drain', cooldown: 10, damage: 10, range: 20 },
+        action4: { id: 'life_drain', name: 'Life Drain', cooldown: 10, damage: 10, range: 20, channelTime: 4 },
         action5: { id: 'chaos_bolt', name: 'Chaos Bolt', cooldown: 12, damage: 45, range: 30, castTime: 2.5 },
     },
 };

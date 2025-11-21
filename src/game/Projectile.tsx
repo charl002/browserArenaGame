@@ -42,6 +42,12 @@ export function Projectile({ startPos, targetPos, targetId, damage, speed, type,
             .normalize();
 
         body.current.setLinvel({ x: direction.x * speed, y: direction.y * speed, z: direction.z * speed }, true);
+
+        // Face direction
+        const dummy = new THREE.Object3D();
+        dummy.position.set(currentPos.x, currentPos.y, currentPos.z);
+        dummy.lookAt(currentTargetPos);
+        body.current.setRotation(dummy.quaternion, true);
     });
 
     return (
@@ -55,22 +61,48 @@ export function Projectile({ startPos, targetPos, targetId, damage, speed, type,
                 if (name && name.startsWith("Enemy-")) {
                     const enemyId = name.replace("Enemy-", "");
                     damageEnemy(enemyId, damage);
+
+                    if (type === 'frostbolt') {
+                        useGameStore.getState().applyStatusEffect(enemyId, { id: `slow-${Date.now()}`, type: 'slow', duration: 4, startTime: Date.now() });
+                    }
+
                     onHit();
                 }
             }}
         >
-            <mesh>
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+                {/* Rotate mesh so cone points forward if needed, but lookAt handles body rotation. 
+                    Cone geometry points up (Y). If we lookAt, Z is forward. 
+                    We need to rotate geometry so it points along Z. 
+                    Rotate X by -PI/2? 
+                */}
                 {type === 'shadow_bolt' ? (
                     <sphereGeometry args={[0.3]} />
                 ) : type === 'chaos_bolt' ? (
                     <capsuleGeometry args={[0.2, 0.8, 4, 8]} />
+                ) : type === 'frostbolt' ? (
+                    <sphereGeometry args={[0.25]} />
+                ) : type === 'glacial_spike' ? (
+                    <coneGeometry args={[0.3, 1.5, 8]} />
                 ) : (
                     <sphereGeometry args={[0.2]} />
                 )}
                 <meshStandardMaterial
-                    color={type === 'shadow_bolt' ? "purple" : type === 'chaos_bolt' ? "lime" : "orange"}
-                    emissive={type === 'shadow_bolt' ? "indigo" : type === 'chaos_bolt' ? "green" : "red"}
-                    emissiveIntensity={type === 'chaos_bolt' ? 3 : 2}
+                    color={
+                        type === 'shadow_bolt' ? "purple" :
+                            type === 'chaos_bolt' ? "lime" :
+                                type === 'frostbolt' ? "cyan" :
+                                    type === 'glacial_spike' ? "blue" :
+                                        "orange"
+                    }
+                    emissive={
+                        type === 'shadow_bolt' ? "indigo" :
+                            type === 'chaos_bolt' ? "green" :
+                                type === 'frostbolt' ? "blue" :
+                                    type === 'glacial_spike' ? "cyan" :
+                                        "red"
+                    }
+                    emissiveIntensity={type === 'chaos_bolt' || type === 'glacial_spike' ? 3 : 2}
                 />
             </mesh>
         </RigidBody>

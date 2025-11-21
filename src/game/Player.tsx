@@ -14,10 +14,11 @@ export function Player() {
     const body = useRef<RapierRigidBody>(null);
     const [subscribeKeys, getKeys] = useKeyboardControls();
     const { world, rapier } = useRapier();
-    const { useAbility, currentClass, addProjectile } = useGameStore();
+    const { useAbility, currentClass, addProjectile, casting, targetId } = useGameStore();
     const abilities = Classes[currentClass as keyof typeof Classes].abilities;
     const [flash, setFlash] = useState(false);
     const { scene, camera } = useThree();
+
 
     // Warrior Animation State
     const [isSwinging, setIsSwinging] = useState(false);
@@ -110,7 +111,7 @@ export function Player() {
                     // Mage, Warlock Projectile Logic
                     if ((currentClass === 'Mage' || currentClass === 'Warlock') &&
                         (ability.range && ability.range > 5) &&
-                        ability.id !== 'polymorph' && ability.id !== 'fear' &&
+                        !['polymorph', 'fear', 'life_drain', 'corruption', 'frost_nova'].includes(ability.id) &&
                         body.current) {
                         const playerPos = body.current.translation();
                         const startPos = new THREE.Vector3(playerPos.x, playerPos.y + 1, playerPos.z);
@@ -130,7 +131,7 @@ export function Player() {
                             targetPos: targetPos,
                             targetId: targetId || undefined,
                             damage: ability.damage || 0,
-                            speed: 15,
+                            speed: ability.id === 'glacial_spike' ? 25 : 15,
                             type: ability.id // Pass ability ID for visuals
                         });
                         return;
@@ -147,7 +148,29 @@ export function Player() {
                         }
                     }
 
-                    // CC Abilities
+                    // CC Abilities & Special Logic
+                    if (ability.id === 'frost_nova') {
+                        // AOE Root
+                        const playerPos = body.current.translation();
+                        const enemies = useGameStore.getState().enemies;
+                        Object.keys(enemies).forEach(enemyId => {
+                            const enemyObj = scene.getObjectByName(`Enemy-${enemyId}`);
+                            if (enemyObj) {
+                                const dist = enemyObj.position.distanceTo(new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z));
+                                if (dist < (ability.range || 8)) {
+                                    useGameStore.getState().applyStatusEffect(enemyId, { id: `root-${Date.now()}`, type: 'root', duration: 4, startTime: Date.now() });
+                                }
+                            }
+                        });
+                        // Visual: Blue Circle
+                        const circle = new THREE.Mesh(new THREE.RingGeometry(0.5, 8, 32), new THREE.MeshBasicMaterial({ color: 'cyan', side: THREE.DoubleSide, transparent: true, opacity: 0.5 }));
+                        circle.rotation.x = -Math.PI / 2;
+                        circle.position.copy(new THREE.Vector3(playerPos.x, 0.1, playerPos.z));
+                        scene.add(circle);
+                        setTimeout(() => scene.remove(circle), 500);
+                        return;
+                    }
+
                     if (targetId) {
                         if (ability.id === 'polymorph') {
                             useGameStore.getState().applyStatusEffect(targetId, { id: `poly-${Date.now()}`, type: 'polymorph', duration: 5, startTime: Date.now() });
@@ -155,10 +178,37 @@ export function Player() {
                             useGameStore.getState().applyStatusEffect(targetId, { id: `fear-${Date.now()}`, type: 'fear', duration: 5, startTime: Date.now() });
                         } else if (ability.id === 'hammer_of_justice') {
                             useGameStore.getState().applyStatusEffect(targetId, { id: `stun-${Date.now()}`, type: 'stun', duration: 3, startTime: Date.now() });
+                        } else if (ability.id === 'corruption') {
+                            useGameStore.getState().applyDot(targetId, {
+                                id: `corr-${Date.now()}`,
+                                damage: ability.damage || 5,
+                                duration: 12,
+                                type: 'corruption'
+                            });
+                            // Visual handled by Enemy component checking for DOT? Or just add a temp visual here?
+                            // Let's add a status effect for visual tracking too, or just rely on the DOT being active?
+                            // The store doesn't track active DOTs in a way that Enemy.tsx can easily see for visuals unless we add it to statusEffects.
+                            // Let's ALSO add a status effect for the visual.
+                            // Wait, I can just add a 'corruption' status effect that does nothing but visual.
+                            // But I need to update the type definition for status effects again if I do that.
+                            // For now, let's just apply the DOT and maybe add a 'slow' effect if needed, but for visual...
+                            // Let's assume Corruption just deals damage. The user asked for a purple circle.
+                            // I'll add a 'corruption' type to status effects in the next step to support the visual.
+                        } else if (ability.id === 'life_drain') {
+                            useGameStore.getState().startChannel(ability.name, ability.channelTime || 4, () => {
+                                // On Tick
+                                useGameStore.getState().damageEnemy(targetId, ability.damage || 10);
+                                useGameStore.setState(state => ({ player: { ...state.player, health: Math.min(state.player.maxHealth, state.player.health + 10) } }));
+                            }, () => {
+                                // On Complete
+                                console.log("Drain Complete");
+                            });
+                            return;
                         }
                     }
 
                     if (targetId && ability.damage && body.current) {
+                        // Melee Checks
                         const playerPos = body.current.translation();
                         let targetPos = new THREE.Vector3(5, 1, 5); // Fallback
 
@@ -337,6 +387,52 @@ export function Player() {
                     <meshStandardMaterial color={currentClass === 'Warlock' ? "purple" : "cyan"} emissive={currentClass === 'Warlock' ? "indigo" : "blue"} emissiveIntensity={2} />
                 </mesh>
             )}
+            {/* Life Drain Visual */}
+            {casting && casting.abilityName === 'life_drain' && targetId && (
+                <LifeDrainBeam targetId={targetId} />
+            )}
         </RigidBody>
+    );
+}
+
+function LifeDrainBeam({ targetId }: { targetId: string }) {
+    const ref = useRef<THREE.Line>(null);
+    const { scene } = useThree();
+
+    useFrame(() => {
+        if (!ref.current) return;
+        const player = scene.getObjectByName("Player");
+        const target = scene.getObjectByName(`Enemy-${targetId}`);
+
+        if (player && target) {
+            const start = player.position;
+            const end = target.position;
+            const geometry = ref.current.geometry;
+            const positions = geometry.attributes.position.array as Float32Array;
+
+            // Update positions
+            positions[0] = start.x;
+            positions[1] = start.y + 0.5; // Chest height
+            positions[2] = start.z;
+            positions[3] = end.x;
+            positions[4] = end.y + 0.5;
+            positions[5] = end.z;
+
+            geometry.attributes.position.needsUpdate = true;
+        }
+    });
+
+    return (
+        <line ref={ref}>
+            <bufferGeometry>
+                <bufferAttribute
+                    attach="attributes-position"
+                    count={2}
+                    array={new Float32Array(6)}
+                    itemSize={3}
+                />
+            </bufferGeometry>
+            <lineBasicMaterial color="#00ff00" linewidth={2} />
+        </line>
     );
 }

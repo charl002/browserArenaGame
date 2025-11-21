@@ -31,11 +31,35 @@ export function HUD() {
                 </div>
             </div>
 
+            {/* Allied Health Bars (Left) */}
+            <div style={{ position: 'absolute', top: '100px', left: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {Object.entries(useGameStore(state => state.allies)).map(([id, ally]) => (
+                    <div key={id} style={{ background: 'rgba(0,0,0,0.5)', padding: '5px', borderRadius: '3px', color: 'white' }}>
+                        <div style={{ fontSize: '12px', marginBottom: '2px' }}>Ally: {id} ({ally.class})</div>
+                        <div style={{ width: '150px', height: '10px', background: '#333' }}>
+                            <div style={{ width: `${(ally.health / ally.maxHealth) * 100}%`, height: '100%', background: 'green', transition: 'width 0.2s' }} />
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Enemy Health Bars (Right) */}
+            <div style={{ position: 'absolute', top: '100px', right: '20px', display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end' }}>
+                {Object.entries(enemies).map(([id, enemy]) => (
+                    <div key={id} style={{ background: 'rgba(0,0,0,0.5)', padding: '5px', borderRadius: '3px', color: 'white', textAlign: 'right' }}>
+                        <div style={{ fontSize: '12px', marginBottom: '2px' }}>Enemy: {id} ({enemy.class})</div>
+                        <div style={{ width: '150px', height: '10px', background: '#333' }}>
+                            <div style={{ width: `${(enemy.health / enemy.maxHealth) * 100}%`, height: '100%', background: 'red', transition: 'width 0.2s' }} />
+                        </div>
+                    </div>
+                ))}
+            </div>
+
             {/* Target Frame */}
             {targetId && enemies[targetId] && (
-                <div style={{ position: 'absolute', top: '20px', left: '250px', background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '5px', color: 'white' }}>
-                    <div style={{ fontWeight: 'bold' }}>Target: {targetId}</div>
-                    <div style={{ width: '200px', height: '20px', background: '#333', marginTop: '5px' }}>
+                <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '5px', color: 'white' }}>
+                    <div style={{ fontWeight: 'bold', textAlign: 'center' }}>Target: {targetId}</div>
+                    <div style={{ width: '300px', height: '20px', background: '#333', marginTop: '5px' }}>
                         <div style={{ width: `${(enemies[targetId].health / enemies[targetId].maxHealth) * 100}%`, height: '100%', background: 'red', transition: 'width 0.2s' }} />
                     </div>
                 </div>
