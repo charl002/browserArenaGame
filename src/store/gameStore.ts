@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { Classes } from '../game/classes';
-import * as THREE from 'three';
 import { SoundManager } from '../game/SoundManager';
 
 interface GameState {
@@ -17,6 +16,8 @@ interface GameState {
     allies: Record<string, { health: number; maxHealth: number; class: string }>;
     matchState: 'active' | 'victory' | 'defeat';
     gameState: 'menu' | 'playing';
+    setGameState: (gameState: 'menu' | 'playing') => void;
+    setClass: (className: string) => void;
 
     setTarget: (id: string | null) => void;
     registerEnemy: (id: string, maxHealth: number, className: string) => void;

@@ -24,7 +24,6 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
     const isPolymorphed = myEffects.some(e => e.type === 'polymorph');
     const isStunned = myEffects.some(e => e.type === 'stun');
     const isFeared = myEffects.some(e => e.type === 'fear');
-    const isRooted = myEffects.some(e => e.type === 'root');
     const isSlowed = myEffects.some(e => e.type === 'slow');
     const isCorrupted = myEffects.some(e => e.type === 'corruption');
 

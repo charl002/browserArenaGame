@@ -8,7 +8,6 @@ import { Classes } from './classes';
 import { SoundManager } from './SoundManager';
 
 const SPEED = 5;
-const JUMP_FORCE = 0.5;
 
 export function Player() {
     const body = useRef<RapierRigidBody>(null);
@@ -17,7 +16,7 @@ export function Player() {
     const { useAbility, currentClass, addProjectile, casting, targetId } = useGameStore();
     const abilities = Classes[currentClass as keyof typeof Classes].abilities;
     const [flash, setFlash] = useState(false);
-    const { scene, camera } = useThree();
+    const { scene } = useThree();
 
 
     // Warrior Animation State
@@ -149,7 +148,7 @@ export function Player() {
                     }
 
                     // CC Abilities & Special Logic
-                    if (ability.id === 'frost_nova') {
+                    if (ability.id === 'frost_nova' && body.current) {
                         // AOE Root
                         const playerPos = body.current.translation();
                         const enemies = useGameStore.getState().enemies;
@@ -185,17 +184,8 @@ export function Player() {
                                 duration: 12,
                                 type: 'corruption'
                             });
-                            // Visual handled by Enemy component checking for DOT? Or just add a temp visual here?
-                            // Let's add a status effect for visual tracking too, or just rely on the DOT being active?
-                            // The store doesn't track active DOTs in a way that Enemy.tsx can easily see for visuals unless we add it to statusEffects.
-                            // Let's ALSO add a status effect for the visual.
-                            // Wait, I can just add a 'corruption' status effect that does nothing but visual.
-                            // But I need to update the type definition for status effects again if I do that.
-                            // For now, let's just apply the DOT and maybe add a 'slow' effect if needed, but for visual...
-                            // Let's assume Corruption just deals damage. The user asked for a purple circle.
-                            // I'll add a 'corruption' type to status effects in the next step to support the visual.
                         } else if (ability.id === 'life_drain') {
-                            useGameStore.getState().startChannel(ability.name, ability.channelTime || 4, () => {
+                            useGameStore.getState().startChannel(ability.id, ability.channelTime || 4, () => {
                                 // On Tick
                                 useGameStore.getState().damageEnemy(targetId, ability.damage || 10);
                                 useGameStore.setState(state => ({ player: { ...state.player, health: Math.min(state.player.maxHealth, state.player.health + 10) } }));
@@ -387,52 +377,77 @@ export function Player() {
                     <meshStandardMaterial color={currentClass === 'Warlock' ? "purple" : "cyan"} emissive={currentClass === 'Warlock' ? "indigo" : "blue"} emissiveIntensity={2} />
                 </mesh>
             )}
-            {/* Life Drain Visual */}
-            {casting && casting.abilityName === 'life_drain' && targetId && (
-                <LifeDrainBeam targetId={targetId} />
-            )}
         </RigidBody>
     );
 }
 
-function LifeDrainBeam({ targetId }: { targetId: string }) {
-    const ref = useRef<THREE.Line>(null);
+export function LifeDrainBeam() {
+    const meshRef = useRef<THREE.Mesh>(null);
+    const debugRef = useRef<THREE.Mesh>(null);
     const { scene } = useThree();
+    const { casting, targetId } = useGameStore();
 
-    useFrame(() => {
-        if (!ref.current) return;
+    useFrame((state) => {
+        const isCastingLifeDrain = casting && casting.abilityName === 'life_drain';
+
+        // Debug Visual Logic
+        if (debugRef.current) {
+            debugRef.current.visible = !!isCastingLifeDrain;
+            if (isCastingLifeDrain) {
+                const player = scene.getObjectByName("Player");
+                const target = targetId ? scene.getObjectByName(`Enemy-${targetId}`) : null;
+
+                // Green if valid, Red if missing targets
+                (debugRef.current.material as THREE.MeshBasicMaterial).color.set(player && target ? "green" : "red");
+
+                if (player) {
+                    debugRef.current.position.copy(player.position).add(new THREE.Vector3(0, 3, 0));
+                }
+            }
+        }
+
+        // Beam Logic
+        if (!meshRef.current) return;
+
+        if (!isCastingLifeDrain || !targetId) {
+            meshRef.current.visible = false;
+            return;
+        }
+
         const player = scene.getObjectByName("Player");
         const target = scene.getObjectByName(`Enemy-${targetId}`);
 
         if (player && target) {
-            const start = player.position;
-            const end = target.position;
-            const geometry = ref.current.geometry;
-            const positions = geometry.attributes.position.array as Float32Array;
+            meshRef.current.visible = true;
+            // Enemy -> Player
+            const start = target.position.clone().add(new THREE.Vector3(0, 1, 0));
+            const end = player.position.clone().add(new THREE.Vector3(0, 1, 0));
 
-            // Update positions
-            positions[0] = start.x;
-            positions[1] = start.y + 0.5; // Chest height
-            positions[2] = start.z;
-            positions[3] = end.x;
-            positions[4] = end.y + 0.5;
-            positions[5] = end.z;
+            const distance = start.distanceTo(end);
+            const mid = start.clone().add(end).multiplyScalar(0.5);
 
-            geometry.attributes.position.needsUpdate = true;
+            meshRef.current.position.copy(mid);
+            meshRef.current.lookAt(end);
+            meshRef.current.rotateX(Math.PI / 2);
+            meshRef.current.scale.set(1, distance, 1);
+        } else {
+            meshRef.current.visible = false;
         }
     });
 
     return (
-        <line ref={ref}>
-            <bufferGeometry>
-                <bufferAttribute
-                    attach="attributes-position"
-                    count={2}
-                    array={new Float32Array(6)}
-                    itemSize={3}
-                />
-            </bufferGeometry>
-            <lineBasicMaterial color="#00ff00" linewidth={2} />
-        </line>
+        <group>
+            {/* The Beam */}
+            <mesh ref={meshRef} visible={false}>
+                <cylinderGeometry args={[0.1, 0.1, 1, 8]} />
+                <meshBasicMaterial color="#00ff00" transparent opacity={0.6} />
+            </mesh>
+
+            {/* Conditional Debug Sphere - Only visible when casting */}
+            <mesh ref={debugRef} visible={false}>
+                <sphereGeometry args={[0.5]} />
+                <meshBasicMaterial color="red" />
+            </mesh>
+        </group>
     );
 }

@@ -100,7 +100,7 @@ export function HUD() {
                         transformOrigin: 'left'
                     }} />
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'black', fontSize: '12px', fontWeight: 'bold' }}>
-                        {casting.abilityName}
+                        {casting.abilityName.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                     </div>
                     <style>{`
                         @keyframes cast {

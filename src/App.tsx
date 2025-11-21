@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { Sky, KeyboardControls, OrbitControls, Environment } from '@react-three/drei'
 import type { KeyboardControlsEntry } from '@react-three/drei'
 import { Physics } from '@react-three/rapier'
-import { Player } from './game/Player'
+import { Player, LifeDrainBeam } from './game/Player'
 import { Enemy } from './game/Enemy'
 import { Ally } from './game/Ally'
 import { HUD } from './components/HUD'
@@ -138,6 +138,9 @@ function App() {
 
                   {/* Projectiles */}
                   <ProjectileSystem />
+
+                  {/* Visual Effects */}
+                  <LifeDrainBeam />
                 </Physics>
 
                 <OrbitControls makeDefault />
