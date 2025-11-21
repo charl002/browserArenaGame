@@ -18,6 +18,14 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
     const enemyState = enemies[id];
     const classDef = Classes[characterClass as keyof typeof Classes];
 
+    // Subscribe to status effects for this enemy to ensure re-renders
+    const statusEffects = useGameStore(state => state.statusEffects);
+    const myEffects = statusEffects.enemies[id] || [];
+    const isPolymorphed = myEffects.some(e => e.type === 'polymorph');
+    const isStunned = myEffects.some(e => e.type === 'stun');
+    const isFeared = myEffects.some(e => e.type === 'fear');
+    const isRooted = myEffects.some(e => e.type === 'root');
+
     useEffect(() => {
         if (classDef) {
             registerEnemy(id, classDef.stats.maxHealth, characterClass);
@@ -39,21 +47,39 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
     useFrame((state) => {
         if (!body.current || !enemyState || enemyState.health <= 0) return;
 
-        // Check CC
-        const { statusEffects } = useGameStore.getState();
-        const myEffects = statusEffects.enemies[id] || [];
-        const isCCd = myEffects.some(e => e.type === 'stun' || e.type === 'root');
+        // Check CC (Get fresh state for physics logic)
+        const currentEffects = useGameStore.getState().statusEffects.enemies[id] || [];
+        const _isPolymorphed = currentEffects.some(e => e.type === 'polymorph');
+        const _isStunned = currentEffects.some(e => e.type === 'stun');
+        const _isFeared = currentEffects.some(e => e.type === 'fear');
+        const _isRooted = currentEffects.some(e => e.type === 'root');
 
-        if (isCCd) {
-            body.current.setLinvel({ x: 0, y: body.current.linvel().y, z: 0 }, true);
+        if (_isStunned || _isPolymorphed || _isRooted) {
+            body.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            body.current.wakeUp(); // Ensure physics engine updates immediately
             return;
+        }
+
+        const myPos = body.current.translation();
+        const myPosVec = new THREE.Vector3(myPos.x, myPos.y, myPos.z);
+
+        // Fear Logic
+        if (_isFeared) {
+            const player = state.scene.getObjectByName("Player");
+            if (player) {
+                const direction = new THREE.Vector3()
+                    .subVectors(myPosVec, player.position) // Away from player
+                    .normalize();
+
+                const speed = 6; // Run fast!
+                body.current.setLinvel({ x: direction.x * speed, y: body.current.linvel().y, z: direction.z * speed }, true);
+            }
+            return; // Skip normal AI
         }
 
         // Find closest target (Player or Ally)
         let closestTarget: { type: 'player' | 'ally', id: string, pos: THREE.Vector3, dist: number } | null = null;
         let minDistance = Infinity;
-        const myPos = body.current.translation();
-        const myPosVec = new THREE.Vector3(myPos.x, myPos.y, myPos.z);
 
         // Check Player
         const player = state.scene.getObjectByName("Player");
@@ -101,9 +127,10 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
                             id: `proj-enemy-${id}-${now}`,
                             startPos: myPosVec,
                             targetPos: closestTarget.pos,
-                            targetId: closestTarget.id === 'player' ? 'player' : closestTarget.id, // Fix target ID for player
+                            targetId: closestTarget.id === 'player' ? 'player' : closestTarget.id,
                             damage: 15,
-                            speed: 10
+                            speed: 10,
+                            type: 'fireball'
                         });
                     } else {
                         // Melee Attack
@@ -148,23 +175,46 @@ export function Enemy({ position, id, characterClass }: { position: [number, num
                 }}
                 onPointerOver={() => setHover(true)}
                 onPointerOut={() => setHover(false)}
+                visible={!isPolymorphed} // Hide normal model if polymorphed
             >
                 <boxGeometry args={[1, 2, 1]} />
                 <meshStandardMaterial color={getColor()} />
                 <Html position={[0, 2.5, 0]} center>
                     <div style={{
                         background: 'rgba(0,0,0,0.5)',
-                        color: 'white',
+                        color: '#ff4444', // Red nameplate for enemies
                         padding: '2px 5px',
                         borderRadius: '3px',
                         fontSize: '12px',
                         whiteSpace: 'nowrap',
-                        pointerEvents: 'none'
+                        pointerEvents: 'none',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center'
                     }}>
-                        {characterClass}
+                        <div>{characterClass}</div>
+                        {isStunned && <div style={{ color: 'yellow', fontWeight: 'bold' }}>STUNNED</div>}
+                        {isFeared && <div style={{ color: 'purple', fontWeight: 'bold' }}>FEARED</div>}
                     </div>
                 </Html>
             </mesh>
+
+            {/* Polymorph Sheep Model */}
+            {isPolymorphed && (
+                <group>
+                    <mesh position={[0, 0.5, 0]}>
+                        <sphereGeometry args={[0.5]} />
+                        <meshStandardMaterial color="white" />
+                    </mesh>
+                    <mesh position={[0.4, 0.8, 0.3]}>
+                        <sphereGeometry args={[0.2]} />
+                        <meshStandardMaterial color="black" />
+                    </mesh>
+                    <Html position={[0, 1.5, 0]} center>
+                        <div style={{ color: 'white', background: 'rgba(0,0,0,0.5)', padding: '2px' }}>Sheep</div>
+                    </Html>
+                </group>
+            )}
         </RigidBody>
     );
 }

@@ -17,11 +17,12 @@ export function Player() {
     const { useAbility, currentClass, addProjectile } = useGameStore();
     const abilities = Classes[currentClass as keyof typeof Classes].abilities;
     const [flash, setFlash] = useState(false);
-    const { scene } = useThree();
+    const { scene, camera } = useThree();
 
     // Warrior Animation State
     const [isSwinging, setIsSwinging] = useState(false);
     const swordRef = useRef<THREE.Mesh>(null);
+    const [isCharging, setIsCharging] = useState(false);
 
     useEffect(() => {
         if (flash) {
@@ -60,7 +61,8 @@ export function Player() {
                     console.log(`Cast ${ability.name}!`);
                     setFlash(true);
 
-                    if (currentClass === 'Warrior' && (ability.id === 'strike' || ability.id === 'whirlwind' || ability.id === 'execute')) {
+                    if ((currentClass === 'Warrior' && (ability.id === 'strike' || ability.id === 'whirlwind' || ability.id === 'execute')) ||
+                        (currentClass === 'Paladin' && ability.id === 'crusader_strike')) {
                         setIsSwinging(true);
                     }
 
@@ -78,7 +80,19 @@ export function Player() {
                                 dir = new THREE.Vector3().subVectors(targetPos, new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z)).normalize();
                             }
                         }
-                        body.current.applyImpulse({ x: dir.x * 50, y: 0, z: dir.z * 50 }, true);
+
+                        setIsCharging(true);
+                        // Apply strong impulse towards target
+                        body.current.applyImpulse({ x: dir.x * 100, y: 5, z: dir.z * 100 }, true);
+
+                        setTimeout(() => {
+                            setIsCharging(false);
+                            if (body.current) {
+                                // Dampen velocity after charge
+                                const vel = body.current.linvel();
+                                body.current.setLinvel({ x: vel.x * 0.1, y: vel.y, z: vel.z * 0.1 }, true);
+                            }
+                        }, 300);
                         return;
                     }
 
@@ -94,7 +108,10 @@ export function Player() {
                     }
 
                     // Mage, Warlock Projectile Logic
-                    if ((currentClass === 'Mage' || currentClass === 'Warlock') && (ability.range && ability.range > 5) && body.current) {
+                    if ((currentClass === 'Mage' || currentClass === 'Warlock') &&
+                        (ability.range && ability.range > 5) &&
+                        ability.id !== 'polymorph' && ability.id !== 'fear' &&
+                        body.current) {
                         const playerPos = body.current.translation();
                         const startPos = new THREE.Vector3(playerPos.x, playerPos.y + 1, playerPos.z);
 
@@ -113,7 +130,8 @@ export function Player() {
                             targetPos: targetPos,
                             targetId: targetId || undefined,
                             damage: ability.damage || 0,
-                            speed: 10
+                            speed: 15,
+                            type: ability.id // Pass ability ID for visuals
                         });
                         return;
                     }
@@ -126,6 +144,17 @@ export function Player() {
                                 player: { ...state.player, health: Math.min(state.player.maxHealth, state.player.health + 30) }
                             }));
                             return;
+                        }
+                    }
+
+                    // CC Abilities
+                    if (targetId) {
+                        if (ability.id === 'polymorph') {
+                            useGameStore.getState().applyStatusEffect(targetId, { id: `poly-${Date.now()}`, type: 'polymorph', duration: 5, startTime: Date.now() });
+                        } else if (ability.id === 'fear') {
+                            useGameStore.getState().applyStatusEffect(targetId, { id: `fear-${Date.now()}`, type: 'fear', duration: 5, startTime: Date.now() });
+                        } else if (ability.id === 'hammer_of_justice') {
+                            useGameStore.getState().applyStatusEffect(targetId, { id: `stun-${Date.now()}`, type: 'stun', duration: 3, startTime: Date.now() });
                         }
                     }
 
@@ -178,17 +207,28 @@ export function Player() {
             return;
         }
 
-        const { forward, backward, left, right, jump } = getKeys();
+        // Camera Follow Logic
+        const playerPos = body.current.translation();
+        const cameraOffset = new THREE.Vector3(0, 10, 20); // Zoomed out
+        const targetCameraPos = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z).add(cameraOffset);
+
+        // Smoothly interpolate camera position
+        state.camera.position.lerp(targetCameraPos, 0.1);
+        state.camera.lookAt(playerPos.x, playerPos.y, playerPos.z);
+
+        // Skip movement logic if charging
+        if (isCharging) return;
+
+        const { forward, backward, left, right } = getKeys();
 
         const linvel = body.current.linvel();
 
-        // Camera direction
-        const camera = state.camera;
-        const front = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        // Camera direction (projected to XZ plane)
+        const front = new THREE.Vector3(0, 0, -1).applyQuaternion(state.camera.quaternion);
         front.y = 0;
         front.normalize();
 
-        const side = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        const side = new THREE.Vector3(1, 0, 0).applyQuaternion(state.camera.quaternion);
         side.y = 0;
         side.normalize();
 
@@ -202,26 +242,48 @@ export function Player() {
         if (direction.length() > 0) {
             direction.normalize().multiplyScalar(SPEED);
             body.current.setLinvel({ x: direction.x, y: linvel.y, z: direction.z }, true);
+
+            // Rotate player to face movement direction
+            const angle = Math.atan2(direction.x, direction.z);
+            const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+            body.current.setRotation(rotation, true);
         } else {
             body.current.setLinvel({ x: 0, y: linvel.y, z: 0 }, true);
         }
-
-        // Jump with Ground Check
-        if (jump) {
-            const rayOrigin = body.current.translation();
-            const rayDir = { x: 0, y: -1, z: 0 };
-
-            if (rapier) {
-                const ray = new rapier.Ray(rayOrigin, rayDir);
-                const hit = world.castRay(ray, 1.1, true);
-
-                if (hit && hit.timeOfImpact < 1.1) {
-                    body.current.applyImpulse({ x: 0, y: JUMP_FORCE, z: 0 }, true);
-                    SoundManager.getInstance().playJump();
-                }
-            }
-        }
     });
+
+    useEffect(() => {
+        const handleJump = () => {
+            if (!body.current || !rapier) return;
+
+            const playerPos = body.current.translation();
+            // Start ray inside the player capsule (bottom is at y-1, center at y).
+            // We start at y - 0.9, which is 0.1 above the bottom of the capsule.
+            // This ensures we don't start inside the ground (y-1) but are close enough to check for it.
+            const rayOrigin = { x: playerPos.x, y: playerPos.y - 0.9, z: playerPos.z };
+            const rayDir = { x: 0, y: -1, z: 0 };
+            const ray = new rapier.Ray(rayOrigin, rayDir);
+
+            // Ray length: We expect ground at distance 0.1. Give it a bit of leeway (0.2).
+            const hit = world.castRay(ray, 0.2, true);
+
+            // Only jump if close to ground AND vertical velocity is low (not already jumping/falling)
+            const linvel = body.current.linvel();
+            if (hit && hit.timeOfImpact < 0.2 && Math.abs(linvel.y) < 0.5) {
+                // Apply impulse
+                body.current.applyImpulse({ x: 0, y: 10, z: 0 }, true);
+                SoundManager.getInstance().playJump();
+            }
+        };
+
+        const unsubJump = subscribeKeys((state) => state.jump, (value) => {
+            if (value) handleJump();
+        });
+
+        return () => {
+            unsubJump();
+        };
+    }, [subscribeKeys, rapier, world]);
 
     return (
         <RigidBody
@@ -229,7 +291,7 @@ export function Player() {
             name="Player"
             colliders={false}
             enabledRotations={[false, false, false]}
-            position={[0, 5, 0]}
+            position={[0, 5, 20]}
         >
             <CapsuleCollider args={[0.5, 0.5]} />
             <mesh castShadow>
@@ -257,9 +319,15 @@ export function Player() {
             )}
             {currentClass === 'Paladin' && (
                 <group position={[0.6, 0, 0.3]}>
-                    <mesh position={[0, 0.5, 0]} rotation={[0, 0, 0]}>
-                        <boxGeometry args={[0.2, 1.2, 0.2]} />
-                        <meshStandardMaterial color="gold" emissive="yellow" emissiveIntensity={0.5} />
+                    {/* Hammer Handle */}
+                    <mesh position={[0, 0, 0]} rotation={[0, 0, 0]}>
+                        <cylinderGeometry args={[0.05, 0.05, 0.6]} />
+                        <meshStandardMaterial color="brown" />
+                    </mesh>
+                    {/* Hammer Head */}
+                    <mesh ref={swordRef} position={[0, 0.4, 0]} rotation={[0, 0, 0]}>
+                        <boxGeometry args={[0.3, 0.5, 0.3]} />
+                        <meshStandardMaterial color="silver" emissive="gold" emissiveIntensity={0.2} />
                     </mesh>
                 </group>
             )}

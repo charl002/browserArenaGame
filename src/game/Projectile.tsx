@@ -10,10 +10,11 @@ interface ProjectileProps {
     targetId?: string;
     damage: number;
     speed: number;
+    type?: string;
     onHit: () => void;
 }
 
-export function Projectile({ startPos, targetPos, targetId, damage, speed, onHit }: ProjectileProps) {
+export function Projectile({ startPos, targetPos, targetId, damage, speed, type, onHit }: ProjectileProps) {
     const body = useRef<RapierRigidBody>(null);
     const { damageEnemy } = useGameStore();
     const startTime = useRef(Date.now());
@@ -59,8 +60,18 @@ export function Projectile({ startPos, targetPos, targetId, damage, speed, onHit
             }}
         >
             <mesh>
-                <sphereGeometry args={[0.2]} />
-                <meshStandardMaterial color="orange" emissive="red" emissiveIntensity={2} />
+                {type === 'shadow_bolt' ? (
+                    <sphereGeometry args={[0.3]} />
+                ) : type === 'chaos_bolt' ? (
+                    <capsuleGeometry args={[0.2, 0.8, 4, 8]} />
+                ) : (
+                    <sphereGeometry args={[0.2]} />
+                )}
+                <meshStandardMaterial
+                    color={type === 'shadow_bolt' ? "purple" : type === 'chaos_bolt' ? "lime" : "orange"}
+                    emissive={type === 'shadow_bolt' ? "indigo" : type === 'chaos_bolt' ? "green" : "red"}
+                    emissiveIntensity={type === 'chaos_bolt' ? 3 : 2}
+                />
             </mesh>
         </RigidBody>
     );

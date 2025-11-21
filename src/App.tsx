@@ -122,17 +122,17 @@ function App() {
                   {/* Allies */}
                   {allyClasses.length > 0 && (
                     <>
-                      <Ally position={[-3, 1, 3]} id="ally1" characterClass={allyClasses[0]} />
-                      <Ally position={[3, 1, 3]} id="ally2" characterClass={allyClasses[1]} />
+                      <Ally position={[-5, 1, 18]} id="ally1" characterClass={allyClasses[0]} />
+                      <Ally position={[5, 1, 18]} id="ally2" characterClass={allyClasses[1]} />
                     </>
                   )}
 
                   {/* Enemies */}
                   {enemyClasses.length > 0 && (
                     <>
-                      <Enemy position={[0, 1, -5]} id="enemy1" characterClass={enemyClasses[0]} />
-                      <Enemy position={[-5, 1, -5]} id="enemy2" characterClass={enemyClasses[1]} />
-                      <Enemy position={[5, 1, -5]} id="enemy3" characterClass={enemyClasses[2]} />
+                      <Enemy position={[0, 1, -20]} id="enemy1" characterClass={enemyClasses[0]} />
+                      <Enemy position={[-5, 1, -20]} id="enemy2" characterClass={enemyClasses[1]} />
+                      <Enemy position={[5, 1, -20]} id="enemy3" characterClass={enemyClasses[2]} />
                     </>
                   )}
 

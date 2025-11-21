@@ -27,28 +27,28 @@ interface GameState {
     damageAlly: (id: string, amount: number) => void;
     removeAlly: (id: string) => void;
 
-    damagePlayer: (amount: number) => void;
-    damageTarget: (amount: number) => void;
-    useAbility: (abilityName: string, cooldown: number) => boolean;
-    setClass: (className: string) => void;
-    setGameState: (state: 'menu' | 'playing') => void;
-
-    projectiles: { id: string; startPos: THREE.Vector3; targetPos: THREE.Vector3; targetId?: string; damage: number; speed: number }[];
-    addProjectile: (p: { id: string; startPos: THREE.Vector3; targetPos: THREE.Vector3; targetId?: string; damage: number; speed: number }) => void;
-    removeProjectile: (id: string) => void;
-
-    casting: { abilityName: string; startTime: number; duration: number; onComplete: () => void } | null;
-    startCast: (abilityName: string, duration: number, onComplete: () => void) => void;
-    cancelCast: () => void;
 
     statusEffects: {
-        player: { id: string; type: 'stun' | 'root' | 'slow'; duration: number; startTime: number }[];
-        enemies: Record<string, { id: string; type: 'stun' | 'root' | 'slow'; duration: number; startTime: number }[]>;
+        player: { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear'; duration: number; startTime: number }[];
+        enemies: Record<string, { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear'; duration: number; startTime: number }[]>;
     };
-    applyStatusEffect: (targetId: string, effect: { id: string; type: 'stun' | 'root' | 'slow'; duration: number; startTime: number }) => void;
+    applyStatusEffect: (targetId: string, effect: { id: string; type: 'stun' | 'root' | 'slow' | 'polymorph' | 'fear'; duration: number; startTime: number }) => void;
     removeStatusEffect: (targetId: string, effectId: string) => void;
 
     resetMatch: () => void;
+
+    // Missing properties
+    useAbility: (abilityName: string, cooldown: number) => boolean;
+    addProjectile: (projectile: any) => void; // Using any to avoid circular dependency or complex type for now, or better: import Projectile type
+    removeProjectile: (id: string) => void;
+    projectiles: any[];
+
+    startCast: (abilityName: string, duration: number, onComplete: () => void) => void;
+    cancelCast: () => void;
+    casting: { abilityName: string; startTime: number; duration: number; onComplete: () => void } | null;
+
+    damagePlayer: (amount: number) => void;
+    damageTarget: (amount: number) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -80,7 +80,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         };
 
         if (Object.keys(rest).length === 0) {
-            SoundManager.getInstance().stopMusic();
+            // SoundManager.getInstance().stopMusic(); // Keep music playing
             return { ...newState, matchState: 'victory' };
         }
         return newState;
@@ -125,7 +125,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const newHealth = Math.max(0, state.player.health - amount);
         SoundManager.getInstance().playHit();
         if (newHealth === 0) {
-            SoundManager.getInstance().stopMusic();
+            // SoundManager.getInstance().stopMusic(); // Keep music playing
             return {
                 player: { ...state.player, health: 0 },
                 matchState: 'defeat'
@@ -184,9 +184,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     setGameState: (gameState) => {
         if (gameState === 'playing') {
             SoundManager.getInstance().startMusic();
-        } else {
-            SoundManager.getInstance().stopMusic();
         }
+        // else {
+        //    SoundManager.getInstance().stopMusic(); // Keep music playing
+        // }
         set({ gameState });
     },
 
@@ -211,18 +212,25 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     cancelCast: () => set({ casting: null }),
 
-    applyStatusEffect: (targetId, effect) => set((state) => {
-        if (targetId === 'player') {
-            return { statusEffects: { ...state.statusEffects, player: [...state.statusEffects.player, effect] } };
-        }
-        const enemyEffects = state.statusEffects.enemies[targetId] || [];
-        return {
-            statusEffects: {
-                ...state.statusEffects,
-                enemies: { ...state.statusEffects.enemies, [targetId]: [...enemyEffects, effect] }
+    applyStatusEffect: (targetId, effect) => {
+        set((state) => {
+            if (targetId === 'player') {
+                return { statusEffects: { ...state.statusEffects, player: [...state.statusEffects.player, effect] } };
             }
-        };
-    }),
+            const enemyEffects = state.statusEffects.enemies[targetId] || [];
+            return {
+                statusEffects: {
+                    ...state.statusEffects,
+                    enemies: { ...state.statusEffects.enemies, [targetId]: [...enemyEffects, effect] }
+                }
+            };
+        });
+
+        // Auto-remove effect after duration
+        setTimeout(() => {
+            get().removeStatusEffect(targetId, effect.id);
+        }, effect.duration * 1000);
+    },
 
     removeStatusEffect: (targetId, effectId) => set((state) => {
         if (targetId === 'player') {

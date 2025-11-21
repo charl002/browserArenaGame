@@ -1,11 +1,19 @@
 import { useGameStore } from '../store/gameStore';
 import { Classes } from '../game/classes';
+import { useState, useEffect } from 'react';
 
 export function HUD() {
     const { player, targetId, currentClass, cooldowns } = useGameStore();
     const casting = useGameStore(state => state.casting);
     const enemies = useGameStore(state => state.enemies);
     const abilities = Classes[currentClass as keyof typeof Classes].abilities;
+
+    // Force re-render for cooldowns
+    const [, setTick] = useState(0);
+    useEffect(() => {
+        const interval = setInterval(() => setTick(t => t + 1), 100);
+        return () => clearInterval(interval);
+    }, []);
 
     return (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', padding: '20px', fontFamily: 'sans-serif', zIndex: 1000 }}>
@@ -39,12 +47,19 @@ export function HUD() {
                     const key = `action${i}` as keyof typeof abilities;
                     const ability = abilities[key];
                     const readyAt = cooldowns[ability.id] || 0;
-                    const onCooldown = Date.now() < readyAt;
+                    const now = Date.now();
+                    const onCooldown = now < readyAt;
+                    const timeLeft = onCooldown ? ((readyAt - now) / 1000).toFixed(1) : null;
 
                     return (
                         <div key={i} style={{ width: '60px', height: '60px', background: onCooldown ? 'rgba(50,0,0,0.7)' : 'rgba(0,0,0,0.7)', border: '1px solid #555', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontSize: '12px', position: 'relative' }}>
                             <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{i}</div>
                             <div style={{ textAlign: 'center' }}>{ability.name}</div>
+                            {onCooldown && (
+                                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '20px', fontWeight: 'bold', color: 'white', textShadow: '1px 1px 2px black' }}>
+                                    {timeLeft}
+                                </div>
+                            )}
                         </div>
                     );
                 })}

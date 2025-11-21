@@ -76,13 +76,15 @@ export class SoundManager {
         if (this.isMusicPlaying) return;
         this.isMusicPlaying = true;
 
-        const audio = new Audio('/music.mp3');
-        audio.loop = true;
-        audio.volume = 0.1;
-        audio.play().catch(e => console.error("Audio play failed:", e));
+        setTimeout(() => {
+            const audio = new Audio('/music.mp3');
+            audio.loop = true;
+            audio.volume = 0.1;
+            audio.play().catch(e => console.error("Audio play failed:", e));
 
-        // Store audio element to stop it later
-        (this as any).bgm = audio;
+            // Store audio element to stop it later
+            (this as any).bgm = audio;
+        }, 2000);
     }
 
     public stopMusic() {

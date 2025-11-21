@@ -14,6 +14,7 @@ export function ProjectileSystem() {
                     targetId={p.targetId}
                     damage={p.damage}
                     speed={p.speed}
+                    type={p.type} // Pass type
                     onHit={() => removeProjectile(p.id)}
                 />
             ))}
