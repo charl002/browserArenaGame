@@ -5,7 +5,8 @@ export type Ability = {
     damage?: number;
     range?: number;
     cost?: number;
-    icon?: string; // Placeholder for now
+    castTime?: number; // Added castTime
+    icon?: string;
 };
 
 export type CharacterClass = {
@@ -48,15 +49,49 @@ export const Mage: CharacterClass = {
         resourceName: 'Mana',
     },
     abilities: {
-        action1: { id: 'fireball', name: 'Fireball', cooldown: 2, damage: 25, range: 30 },
+        action1: { id: 'fireball', name: 'Fireball', cooldown: 2, damage: 25, range: 30, castTime: 1.5 },
         action2: { id: 'frost_nova', name: 'Frost Nova', cooldown: 15, damage: 5, range: 8 },
         action3: { id: 'blink', name: 'Blink', cooldown: 10, range: 20 },
-        action4: { id: 'polymorph', name: 'Polymorph', cooldown: 20, range: 20 },
-        action5: { id: 'pyroblast', name: 'Pyroblast', cooldown: 6, damage: 40, range: 30 },
+        action4: { id: 'polymorph', name: 'Polymorph', cooldown: 20, range: 20, castTime: 1.5 },
+        action5: { id: 'pyroblast', name: 'Pyroblast', cooldown: 6, damage: 40, range: 30, castTime: 3.0 },
+    },
+};
+
+export const Warlock: CharacterClass = {
+    name: 'Warlock',
+    stats: {
+        maxHealth: 100,
+        maxResource: 100,
+        resourceName: 'Mana',
+    },
+    abilities: {
+        action1: { id: 'shadow_bolt', name: 'Shadow Bolt', cooldown: 2.5, damage: 20, range: 30, castTime: 1.5 },
+        action2: { id: 'corruption', name: 'Corruption', cooldown: 0, damage: 15, range: 30 },
+        action3: { id: 'fear', name: 'Fear', cooldown: 15, range: 20, castTime: 1.5 },
+        action4: { id: 'life_drain', name: 'Life Drain', cooldown: 10, damage: 10, range: 20 },
+        action5: { id: 'chaos_bolt', name: 'Chaos Bolt', cooldown: 12, damage: 45, range: 30, castTime: 2.5 },
+    },
+};
+
+export const Paladin: CharacterClass = {
+    name: 'Paladin',
+    stats: {
+        maxHealth: 140,
+        maxResource: 100,
+        resourceName: 'Mana',
+    },
+    abilities: {
+        action1: { id: 'crusader_strike', name: 'Crusader Strike', cooldown: 4, damage: 20, range: 3 },
+        action2: { id: 'judgment', name: 'Judgment', cooldown: 8, damage: 15, range: 20 },
+        action3: { id: 'holy_light', name: 'Holy Light', cooldown: 2.5, damage: -30, range: 30, castTime: 2.0 },
+        action4: { id: 'hammer_of_justice', name: 'Hammer of Justice', cooldown: 30, damage: 5, range: 10 },
+        action5: { id: 'divine_storm', name: 'Divine Storm', cooldown: 10, damage: 25, range: 8 },
     },
 };
 
 export const Classes = {
     Warrior,
     Mage,
+    Warlock,
+    Paladin,
 };

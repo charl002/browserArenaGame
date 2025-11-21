@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Classes } from '../game/classes';
 import * as THREE from 'three';
+import { SoundManager } from '../game/SoundManager';
 
 interface GameState {
     player: {
@@ -12,36 +13,42 @@ interface GameState {
     currentClass: string;
     targetId: string | null;
     cooldowns: Record<string, number>;
-    enemies: Record<string, { health: number; maxHealth: number }>;
-    projectiles: Array<{
-        id: string;
-        startPos: THREE.Vector3;
-        targetPos: THREE.Vector3;
-        targetId?: string;
-        damage: number;
-        speed: number;
-    }>;
-
-    casting: { abilityName: string; startTime: number; duration: number; onComplete: () => void } | null;
-    statusEffects: {
-        player: Array<{ id: string; type: 'stun' | 'root' | 'slow'; duration: number; startTime: number }>;
-        enemies: Record<string, Array<{ id: string; type: 'stun' | 'root' | 'slow'; duration: number; startTime: number }>>;
-    };
+    enemies: Record<string, { health: number; maxHealth: number; class: string }>;
+    allies: Record<string, { health: number; maxHealth: number; class: string }>;
+    matchState: 'active' | 'victory' | 'defeat';
+    gameState: 'menu' | 'playing';
 
     setTarget: (id: string | null) => void;
-    registerEnemy: (id: string, maxHealth: number) => void;
+    registerEnemy: (id: string, maxHealth: number, className: string) => void;
     damageEnemy: (id: string, amount: number) => void;
     removeEnemy: (id: string) => void;
+
+    registerAlly: (id: string, maxHealth: number, className: string) => void;
+    damageAlly: (id: string, amount: number) => void;
+    removeAlly: (id: string) => void;
+
+    damagePlayer: (amount: number) => void;
     damageTarget: (amount: number) => void;
     useAbility: (abilityName: string, cooldown: number) => boolean;
     setClass: (className: string) => void;
+    setGameState: (state: 'menu' | 'playing') => void;
+
+    projectiles: { id: string; startPos: THREE.Vector3; targetPos: THREE.Vector3; targetId?: string; damage: number; speed: number }[];
     addProjectile: (p: { id: string; startPos: THREE.Vector3; targetPos: THREE.Vector3; targetId?: string; damage: number; speed: number }) => void;
     removeProjectile: (id: string) => void;
 
+    casting: { abilityName: string; startTime: number; duration: number; onComplete: () => void } | null;
     startCast: (abilityName: string, duration: number, onComplete: () => void) => void;
     cancelCast: () => void;
+
+    statusEffects: {
+        player: { id: string; type: 'stun' | 'root' | 'slow'; duration: number; startTime: number }[];
+        enemies: Record<string, { id: string; type: 'stun' | 'root' | 'slow'; duration: number; startTime: number }[]>;
+    };
     applyStatusEffect: (targetId: string, effect: { id: string; type: 'stun' | 'root' | 'slow'; duration: number; startTime: number }) => void;
     removeStatusEffect: (targetId: string, effectId: string) => void;
+
+    resetMatch: () => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -55,19 +62,28 @@ export const useGameStore = create<GameState>((set, get) => ({
     targetId: null,
     cooldowns: {},
     enemies: {},
+    allies: {},
+    matchState: 'active',
+    gameState: 'menu',
 
     setTarget: (id) => set({ targetId: id }),
 
-    registerEnemy: (id, maxHealth) => set((state) => ({
-        enemies: { ...state.enemies, [id]: { health: maxHealth, maxHealth } }
+    registerEnemy: (id, maxHealth, className) => set((state) => ({
+        enemies: { ...state.enemies, [id]: { health: maxHealth, maxHealth, class: className } }
     })),
 
     removeEnemy: (id) => set((state) => {
         const { [id]: _, ...rest } = state.enemies;
-        return {
+        const newState = {
             enemies: rest,
             targetId: state.targetId === id ? null : state.targetId
         };
+
+        if (Object.keys(rest).length === 0) {
+            SoundManager.getInstance().stopMusic();
+            return { ...newState, matchState: 'victory' };
+        }
+        return newState;
     }),
 
     damageEnemy: (id, amount) => set((state) => {
@@ -76,6 +92,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         const newHealth = Math.max(0, enemy.health - amount);
         console.log(`Enemy ${id} took ${amount} damage. Health: ${newHealth}/${enemy.maxHealth}`);
+        SoundManager.getInstance().playHit();
 
         return {
             enemies: {
@@ -83,6 +100,38 @@ export const useGameStore = create<GameState>((set, get) => ({
                 [id]: { ...enemy, health: newHealth }
             }
         };
+    }),
+
+    registerAlly: (id, maxHealth, className) => set((state) => ({
+        allies: { ...state.allies, [id]: { health: maxHealth, maxHealth, class: className } }
+    })),
+
+    damageAlly: (id, amount) => set((state) => {
+        const ally = state.allies[id];
+        if (!ally) return {};
+        const newHealth = Math.max(0, ally.health - amount);
+        SoundManager.getInstance().playHit();
+        return {
+            allies: { ...state.allies, [id]: { ...ally, health: newHealth } }
+        };
+    }),
+
+    removeAlly: (id) => set((state) => {
+        const { [id]: _, ...rest } = state.allies;
+        return { allies: rest };
+    }),
+
+    damagePlayer: (amount) => set((state) => {
+        const newHealth = Math.max(0, state.player.health - amount);
+        SoundManager.getInstance().playHit();
+        if (newHealth === 0) {
+            SoundManager.getInstance().stopMusic();
+            return {
+                player: { ...state.player, health: 0 },
+                matchState: 'defeat'
+            };
+        }
+        return { player: { ...state.player, health: newHealth } };
     }),
 
     damageTarget: (amount) => {
@@ -103,6 +152,15 @@ export const useGameStore = create<GameState>((set, get) => ({
                     [abilityName]: now + cooldown * 1000,
                 },
             }));
+
+            // Simple audio mapping
+            const cls = get().currentClass;
+            if (cls === 'Warrior' || cls === 'Paladin') {
+                SoundManager.getInstance().playAttack('melee');
+            } else {
+                SoundManager.getInstance().playAttack('ranged');
+            }
+
             return true;
         }
         return false;
@@ -121,6 +179,15 @@ export const useGameStore = create<GameState>((set, get) => ({
                 }
             });
         }
+    },
+
+    setGameState: (gameState) => {
+        if (gameState === 'playing') {
+            SoundManager.getInstance().startMusic();
+        } else {
+            SoundManager.getInstance().stopMusic();
+        }
+        set({ gameState });
     },
 
     projectiles: [],
@@ -167,6 +234,27 @@ export const useGameStore = create<GameState>((set, get) => ({
                 ...state.statusEffects,
                 enemies: { ...state.statusEffects.enemies, [targetId]: enemyEffects.filter(e => e.id !== effectId) }
             }
+        };
+    }),
+
+    resetMatch: () => set((state) => {
+        // Reset player health based on class
+        const cls = Classes[state.currentClass as keyof typeof Classes];
+        SoundManager.getInstance().startMusic();
+        return {
+            player: {
+                health: cls.stats.maxHealth,
+                maxHealth: cls.stats.maxHealth,
+                resource: cls.stats.maxResource,
+                maxResource: cls.stats.maxResource,
+            },
+            matchState: 'active',
+            enemies: {}, // Will be re-registered by components
+            allies: {}, // Will be re-registered by components
+            projectiles: [],
+            statusEffects: { player: [], enemies: {} },
+            casting: null,
+            targetId: null
         };
     }),
 }));

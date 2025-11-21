@@ -5,6 +5,7 @@ import { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 import { Classes } from './classes';
+import { SoundManager } from './SoundManager';
 
 const SPEED = 5;
 const JUMP_FORCE = 0.5;
@@ -12,7 +13,7 @@ const JUMP_FORCE = 0.5;
 export function Player() {
     const body = useRef<RapierRigidBody>(null);
     const [subscribeKeys, getKeys] = useKeyboardControls();
-    const { rapier, world } = useRapier();
+    const { world, rapier } = useRapier();
     const { useAbility, currentClass, addProjectile } = useGameStore();
     const abilities = Classes[currentClass as keyof typeof Classes].abilities;
     const [flash, setFlash] = useState(false);
@@ -50,93 +51,108 @@ export function Player() {
     useEffect(() => {
         const handleAbility = (abilityKey: keyof typeof abilities) => {
             const ability = abilities[abilityKey];
-            if (useAbility(ability.id, ability.cooldown)) {
-                console.log(`Cast ${ability.name}!`);
-                setFlash(true);
+            const { startCast, useAbility: triggerAbility } = useGameStore.getState();
 
-                if (currentClass === 'Warrior' && (ability.id === 'strike' || ability.id === 'whirlwind' || ability.id === 'execute')) {
-                    setIsSwinging(true);
-                }
+            // Check if ability is ready (cooldown)
+            if (triggerAbility(ability.id, ability.cooldown)) {
 
-                const targetId = useGameStore.getState().targetId;
+                const executeAbility = () => {
+                    console.log(`Cast ${ability.name}!`);
+                    setFlash(true);
 
-                // Movement Abilities
-                if (ability.id === 'charge' && body.current) {
-                    const playerPos = body.current.translation();
-                    let dir = new THREE.Vector3(0, 0, -1).applyQuaternion(body.current.rotation());
+                    if (currentClass === 'Warrior' && (ability.id === 'strike' || ability.id === 'whirlwind' || ability.id === 'execute')) {
+                        setIsSwinging(true);
+                    }
 
-                    if (targetId) {
-                        const targetObj = scene.getObjectByName(`Enemy-${targetId}`);
-                        if (targetObj) {
-                            const targetPos = targetObj.position;
-                            dir = new THREE.Vector3().subVectors(targetPos, new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z)).normalize();
+                    const targetId = useGameStore.getState().targetId;
+
+                    // Movement Abilities
+                    if (ability.id === 'charge' && body.current) {
+                        const playerPos = body.current.translation();
+                        let dir = new THREE.Vector3(0, 0, -1).applyQuaternion(body.current.rotation());
+
+                        if (targetId) {
+                            const targetObj = scene.getObjectByName(`Enemy-${targetId}`);
+                            if (targetObj) {
+                                const targetPos = targetObj.position;
+                                dir = new THREE.Vector3().subVectors(targetPos, new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z)).normalize();
+                            }
+                        }
+                        body.current.applyImpulse({ x: dir.x * 50, y: 0, z: dir.z * 50 }, true);
+                        return;
+                    }
+
+                    if (ability.id === 'blink' && body.current) {
+                        const playerPos = body.current.translation();
+                        const linvel = body.current.linvel();
+                        let dir = new THREE.Vector3(linvel.x, 0, linvel.z).normalize();
+                        if (dir.length() === 0) dir = new THREE.Vector3(0, 0, -1); // Default
+
+                        const newPos = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z).add(dir.multiplyScalar(10));
+                        body.current.setTranslation({ x: newPos.x, y: newPos.y + 1, z: newPos.z }, true);
+                        return;
+                    }
+
+                    // Mage, Warlock Projectile Logic
+                    if ((currentClass === 'Mage' || currentClass === 'Warlock') && (ability.range && ability.range > 5) && body.current) {
+                        const playerPos = body.current.translation();
+                        const startPos = new THREE.Vector3(playerPos.x, playerPos.y + 1, playerPos.z);
+
+                        let targetPos = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z + 10); // Default forward
+
+                        if (targetId) {
+                            const targetObj = scene.getObjectByName(`Enemy-${targetId}`);
+                            if (targetObj) {
+                                targetPos = targetObj.position.clone();
+                            }
+                        }
+
+                        addProjectile({
+                            id: Math.random().toString(),
+                            startPos: startPos,
+                            targetPos: targetPos,
+                            targetId: targetId || undefined,
+                            damage: ability.damage || 0,
+                            speed: 10
+                        });
+                        return;
+                    }
+
+                    // Paladin Melee & Spells
+                    if (currentClass === 'Paladin') {
+                        if (ability.id === 'holy_light') {
+                            // Heal self logic
+                            useGameStore.setState(state => ({
+                                player: { ...state.player, health: Math.min(state.player.maxHealth, state.player.health + 30) }
+                            }));
+                            return;
                         }
                     }
-                    body.current.applyImpulse({ x: dir.x * 50, y: 0, z: dir.z * 50 }, true);
-                    return;
-                }
 
-                if (ability.id === 'blink' && body.current) {
-                    const playerPos = body.current.translation();
-                    const linvel = body.current.linvel();
-                    let dir = new THREE.Vector3(linvel.x, 0, linvel.z).normalize();
-                    if (dir.length() === 0) dir = new THREE.Vector3(0, 0, -1); // Default
+                    if (targetId && ability.damage && body.current) {
+                        const playerPos = body.current.translation();
+                        let targetPos = new THREE.Vector3(5, 1, 5); // Fallback
 
-                    const newPos = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z).add(dir.multiplyScalar(10));
-                    body.current.setTranslation({ x: newPos.x, y: newPos.y + 1, z: newPos.z }, true);
-                    return;
-                }
-
-                // Mage Projectile Logic
-                if (currentClass === 'Mage' && (ability.id === 'fireball' || ability.id === 'frostbolt' || ability.id === 'pyroblast') && body.current) {
-                    const playerPos = body.current.translation();
-                    const startPos = new THREE.Vector3(playerPos.x, playerPos.y + 1, playerPos.z);
-
-                    let targetPos = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z + 10); // Default forward
-
-                    if (targetId) {
                         const targetObj = scene.getObjectByName(`Enemy-${targetId}`);
                         if (targetObj) {
-                            targetPos = targetObj.position.clone();
+                            targetPos = targetObj.position;
+                        }
+
+                        const dist = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z).distanceTo(targetPos);
+
+                        if (dist <= (ability.range || 5)) {
+                            console.log("Hit target!");
+                            useGameStore.getState().damageTarget(ability.damage || 0);
+                        } else {
+                            console.log("Out of range!", dist, ability.range);
                         }
                     }
+                };
 
-                    addProjectile({
-                        id: Math.random().toString(),
-                        startPos: startPos,
-                        targetPos: targetPos,
-                        targetId: targetId || undefined,
-                        damage: ability.damage || 0,
-                        speed: 10
-                    });
-                    return;
-                }
-
-                if (targetId && ability.damage && body.current) {
-                    const playerPos = body.current.translation();
-                    let targetPos = new THREE.Vector3(5, 1, 5); // Fallback
-
-                    const targetObj = scene.getObjectByName(`Enemy-${targetId}`);
-                    if (targetObj) {
-                        // Rapier bodies might be nested or named differently, but we named the RigidBody `Enemy-${id}`
-                        // However, `scene.getObjectByName` finds the Object3D. 
-                        // The RigidBody component wraps it.
-                        // Let's assume the object with the name is the one we want.
-                        // Actually, in `Enemy.tsx`, `name` is on `RigidBody`.
-                        // R3F/Rapier puts the name on the Group or Mesh?
-                        // Let's check Enemy.tsx. It puts name on RigidBody.
-                        // So `scene.getObjectByName` should find it.
-                        targetPos = targetObj.position;
-                    }
-
-                    const dist = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z).distanceTo(targetPos);
-
-                    if (dist <= (ability.range || 5)) {
-                        console.log("Hit target!");
-                        useGameStore.getState().damageTarget(ability.damage || 0);
-                    } else {
-                        console.log("Out of range!", dist, ability.range);
-                    }
+                if (ability.castTime && ability.castTime > 0) {
+                    startCast(ability.name, ability.castTime, executeAbility);
+                } else {
+                    executeAbility();
                 }
             }
         }
@@ -190,15 +206,19 @@ export function Player() {
             body.current.setLinvel({ x: 0, y: linvel.y, z: 0 }, true);
         }
 
-        // Jump
+        // Jump with Ground Check
         if (jump) {
             const rayOrigin = body.current.translation();
             const rayDir = { x: 0, y: -1, z: 0 };
-            const ray = new rapier.Ray(rayOrigin, rayDir);
-            const hit = world.castRay(ray, 1.1, true);
 
-            if (hit && hit.timeOfImpact < 1.1) {
-                body.current.applyImpulse({ x: 0, y: JUMP_FORCE, z: 0 }, true);
+            if (rapier) {
+                const ray = new rapier.Ray(rayOrigin, rayDir);
+                const hit = world.castRay(ray, 1.1, true);
+
+                if (hit && hit.timeOfImpact < 1.1) {
+                    body.current.applyImpulse({ x: 0, y: JUMP_FORCE, z: 0 }, true);
+                    SoundManager.getInstance().playJump();
+                }
             }
         }
     });
@@ -214,7 +234,7 @@ export function Player() {
             <CapsuleCollider args={[0.5, 0.5]} />
             <mesh castShadow>
                 <capsuleGeometry args={[0.5, 1, 4, 8]} />
-                <meshStandardMaterial color={flash ? "white" : currentClass === 'Warrior' ? "brown" : "purple"} />
+                <meshStandardMaterial color={flash ? "white" : currentClass === 'Warrior' ? "brown" : currentClass === 'Paladin' ? "gold" : currentClass === 'Warlock' ? "purple" : "blue"} />
             </mesh>
             {currentClass === 'Warrior' && (
                 <group position={[0.6, 0, 0.3]}>
@@ -235,10 +255,18 @@ export function Player() {
                     </mesh>
                 </group>
             )}
-            {currentClass === 'Mage' && (
+            {currentClass === 'Paladin' && (
+                <group position={[0.6, 0, 0.3]}>
+                    <mesh position={[0, 0.5, 0]} rotation={[0, 0, 0]}>
+                        <boxGeometry args={[0.2, 1.2, 0.2]} />
+                        <meshStandardMaterial color="gold" emissive="yellow" emissiveIntensity={0.5} />
+                    </mesh>
+                </group>
+            )}
+            {(currentClass === 'Mage' || currentClass === 'Warlock') && (
                 <mesh position={[0.6, 0.5, 0.3]}>
                     <sphereGeometry args={[0.15]} />
-                    <meshStandardMaterial color="cyan" emissive="blue" emissiveIntensity={2} />
+                    <meshStandardMaterial color={currentClass === 'Warlock' ? "purple" : "cyan"} emissive={currentClass === 'Warlock' ? "indigo" : "blue"} emissiveIntensity={2} />
                 </mesh>
             )}
         </RigidBody>
