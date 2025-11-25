@@ -315,7 +315,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             projectiles: [],
             statusEffects: { player: [], enemies: {} },
             casting: null,
-            targetId: null
+            targetId: null,
+            cooldowns: {}
         };
     }),
 }));

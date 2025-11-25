@@ -49,6 +49,8 @@ export function Player() {
         }
     });
 
+    const chargeDir = useRef(new THREE.Vector3());
+
     useEffect(() => {
         const handleAbility = (abilityKey: keyof typeof abilities) => {
             const ability = abilities[abilityKey];
@@ -72,27 +74,34 @@ export function Player() {
                     if (ability.id === 'charge' && body.current) {
                         const playerPos = body.current.translation();
                         let dir = new THREE.Vector3(0, 0, -1).applyQuaternion(body.current.rotation());
+                        let distance = 10; // Default distance
 
                         if (targetId) {
                             const targetObj = scene.getObjectByName(`Enemy-${targetId}`);
                             if (targetObj) {
                                 const targetPos = targetObj.position;
-                                dir = new THREE.Vector3().subVectors(targetPos, new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z)).normalize();
+                                const vecToTarget = new THREE.Vector3().subVectors(targetPos, new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z));
+                                distance = vecToTarget.length();
+                                // Stop slightly before target (e.g. 1.5 units)
+                                distance = Math.max(0, distance - 1.5);
+                                dir = vecToTarget.normalize();
                             }
                         }
 
                         setIsCharging(true);
-                        // Apply strong impulse towards target
-                        body.current.applyImpulse({ x: dir.x * 100, y: 5, z: dir.z * 100 }, true);
+                        chargeDir.current.copy(dir);
+
+                        // Calculate duration based on speed (e.g. 40 units/sec)
+                        const speed = 40;
+                        const duration = (distance / speed) * 1000; // ms
 
                         setTimeout(() => {
                             setIsCharging(false);
                             if (body.current) {
-                                // Dampen velocity after charge
-                                const vel = body.current.linvel();
-                                body.current.setLinvel({ x: vel.x * 0.1, y: vel.y, z: vel.z * 0.1 }, true);
+                                // Stop completely
+                                body.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
                             }
-                        }, 300);
+                        }, duration);
                         return;
                     }
 
@@ -347,6 +356,14 @@ export function Player() {
     useFrame((state) => {
         if (!body.current) return;
 
+        // Camera Follow Logic (Always run this first)
+        const playerPos = body.current.translation();
+        const cameraOffset = new THREE.Vector3(0, 10, 20); // Zoomed out
+        const targetCameraPos = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z).add(cameraOffset);
+
+        state.camera.position.lerp(targetCameraPos, 0.1);
+        state.camera.lookAt(playerPos.x, playerPos.y, playerPos.z);
+
         const { casting, statusEffects } = useGameStore.getState();
         const isCCd = statusEffects.player.some(e => e.type === 'stun' || e.type === 'root');
         const isCasting = !!casting;
@@ -356,23 +373,18 @@ export function Player() {
             return;
         }
 
-        // Camera Follow Logic
-        const playerPos = body.current.translation();
-        const cameraOffset = new THREE.Vector3(0, 10, 20); // Zoomed out
-        const targetCameraPos = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z).add(cameraOffset);
+        // Charge Logic
+        if (isCharging) {
+            const speed = 40;
+            body.current.setLinvel({
+                x: chargeDir.current.x * speed,
+                y: 0,
+                z: chargeDir.current.z * speed
+            }, true);
+            return;
+        }
 
-        // Smoothly interpolate camera position
-        state.camera.position.lerp(targetCameraPos, 0.1);
-        state.camera.lookAt(playerPos.x, playerPos.y, playerPos.z);
-
-        // Skip movement logic if charging
-        if (isCharging) return;
-
-        const { forward, backward, left, right } = getKeys();
-
-        const linvel = body.current.linvel();
-
-        // Camera direction (projected to XZ plane)
+        // Normal Movement Logic
         const front = new THREE.Vector3(0, 0, -1).applyQuaternion(state.camera.quaternion);
         front.y = 0;
         front.normalize();
@@ -382,6 +394,8 @@ export function Player() {
         side.normalize();
 
         const direction = new THREE.Vector3();
+        const { forward, backward, left, right } = getKeys();
+        const linvel = body.current.linvel();
 
         if (forward) direction.add(front);
         if (backward) direction.sub(front);
