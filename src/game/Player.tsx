@@ -147,6 +147,115 @@ export function Player() {
                         }
                     }
 
+                    // Warrior: Whirlwind (AOE)
+                    if (ability.id === 'whirlwind' && body.current) {
+                        const playerPos = body.current.translation();
+                        const enemies = useGameStore.getState().enemies;
+                        Object.keys(enemies).forEach(enemyId => {
+                            const enemyObj = scene.getObjectByName(`Enemy-${enemyId}`);
+                            if (enemyObj) {
+                                const dist = enemyObj.position.distanceTo(new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z));
+                                if (dist < (ability.range || 5)) {
+                                    useGameStore.getState().damageEnemy(enemyId, ability.damage || 10);
+                                }
+                            }
+                        });
+
+                        // Visual: Spinning Red Ring
+                        const circle = new THREE.Mesh(new THREE.RingGeometry(0.5, 5, 32), new THREE.MeshBasicMaterial({ color: 'red', side: THREE.DoubleSide, transparent: true, opacity: 0.5 }));
+                        circle.rotation.x = -Math.PI / 2;
+                        circle.position.copy(new THREE.Vector3(playerPos.x, 0.5, playerPos.z));
+                        scene.add(circle);
+
+                        // Animate rotation
+                        let rot = 0;
+                        const interval = setInterval(() => {
+                            rot += 0.5;
+                            circle.rotation.z = rot;
+                        }, 16);
+
+                        setTimeout(() => {
+                            clearInterval(interval);
+                            scene.remove(circle);
+                        }, 500);
+                        return;
+                    }
+
+                    // Paladin: Divine Storm (AOE)
+                    if (ability.id === 'divine_storm' && body.current) {
+                        const playerPos = body.current.translation();
+                        const enemies = useGameStore.getState().enemies;
+                        Object.keys(enemies).forEach(enemyId => {
+                            const enemyObj = scene.getObjectByName(`Enemy-${enemyId}`);
+                            if (enemyObj) {
+                                const dist = enemyObj.position.distanceTo(new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z));
+                                if (dist < (ability.range || 8)) {
+                                    useGameStore.getState().damageEnemy(enemyId, ability.damage || 25);
+                                }
+                            }
+                        });
+
+                        // Visual: Spinning Gold Ring
+                        const circle = new THREE.Mesh(new THREE.RingGeometry(0.5, 6, 32), new THREE.MeshBasicMaterial({ color: 'gold', side: THREE.DoubleSide, transparent: true, opacity: 0.6 }));
+                        circle.rotation.x = -Math.PI / 2;
+                        circle.position.copy(new THREE.Vector3(playerPos.x, 0.5, playerPos.z));
+                        scene.add(circle);
+                        // Animate rotation
+                        let rot = 0;
+                        const interval = setInterval(() => {
+                            rot += 0.5;
+                            circle.rotation.z = rot;
+                        }, 16);
+
+                        setTimeout(() => {
+                            clearInterval(interval);
+                            scene.remove(circle);
+                        }, 500);
+                        return;
+                    }
+
+                    // Warrior: Shield Bash (Stun)
+                    if (ability.id === 'shield_bash' && targetId && body.current) {
+                        const playerPos = body.current.translation();
+                        const targetObj = scene.getObjectByName(`Enemy-${targetId}`);
+                        if (targetObj) {
+                            const dist = targetObj.position.distanceTo(new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z));
+                            if (dist <= (ability.range || 3)) {
+                                useGameStore.getState().damageEnemy(targetId, ability.damage || 5);
+                                useGameStore.getState().applyStatusEffect(targetId, { id: `stun-${Date.now()}`, type: 'stun', duration: 3, startTime: Date.now() });
+                                console.log("Shield Bash Stun Applied!");
+                            } else {
+                                console.log("Shield Bash Out of Range");
+                            }
+                        }
+                        return;
+                    }
+
+                    // Paladin: Judgment (Projectile)
+                    if (ability.id === 'judgment' && body.current) {
+                        const playerPos = body.current.translation();
+                        const startPos = new THREE.Vector3(playerPos.x, playerPos.y + 1, playerPos.z);
+                        let targetPos = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z + 10); // Default forward
+
+                        if (targetId) {
+                            const targetObj = scene.getObjectByName(`Enemy-${targetId}`);
+                            if (targetObj) {
+                                targetPos = targetObj.position.clone();
+                            }
+                        }
+
+                        addProjectile({
+                            id: Math.random().toString(),
+                            startPos: startPos,
+                            targetPos: targetPos,
+                            targetId: targetId || undefined,
+                            damage: ability.damage || 15,
+                            speed: 20,
+                            type: 'judgment'
+                        });
+                        return;
+                    }
+
                     // CC Abilities & Special Logic
                     if (ability.id === 'frost_nova' && body.current) {
                         // AOE Root

@@ -84,6 +84,8 @@ export function Projectile({ startPos, targetPos, targetId, damage, speed, type,
                     <sphereGeometry args={[0.25]} />
                 ) : type === 'glacial_spike' ? (
                     <coneGeometry args={[0.3, 1.5, 8]} />
+                ) : type === 'judgment' ? (
+                    <boxGeometry args={[0.4, 0.4, 0.8]} />
                 ) : (
                     <sphereGeometry args={[0.2]} />
                 )}
@@ -93,16 +95,18 @@ export function Projectile({ startPos, targetPos, targetId, damage, speed, type,
                             type === 'chaos_bolt' ? "lime" :
                                 type === 'frostbolt' ? "cyan" :
                                     type === 'glacial_spike' ? "blue" :
-                                        "orange"
+                                        type === 'judgment' ? "gold" :
+                                            "orange"
                     }
                     emissive={
                         type === 'shadow_bolt' ? "indigo" :
                             type === 'chaos_bolt' ? "green" :
                                 type === 'frostbolt' ? "blue" :
                                     type === 'glacial_spike' ? "cyan" :
-                                        "red"
+                                        type === 'judgment' ? "yellow" :
+                                            "red"
                     }
-                    emissiveIntensity={type === 'chaos_bolt' || type === 'glacial_spike' ? 3 : 2}
+                    emissiveIntensity={type === 'chaos_bolt' || type === 'glacial_spike' || type === 'judgment' ? 3 : 2}
                 />
             </mesh>
         </RigidBody>
