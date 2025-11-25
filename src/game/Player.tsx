@@ -383,28 +383,11 @@ export function Player() {
 
 export function LifeDrainBeam() {
     const meshRef = useRef<THREE.Mesh>(null);
-    const debugRef = useRef<THREE.Mesh>(null);
     const { scene } = useThree();
     const { casting, targetId } = useGameStore();
 
     useFrame((state) => {
         const isCastingLifeDrain = casting && casting.abilityName === 'life_drain';
-
-        // Debug Visual Logic
-        if (debugRef.current) {
-            debugRef.current.visible = !!isCastingLifeDrain;
-            if (isCastingLifeDrain) {
-                const player = scene.getObjectByName("Player");
-                const target = targetId ? scene.getObjectByName(`Enemy-${targetId}`) : null;
-
-                // Green if valid, Red if missing targets
-                (debugRef.current.material as THREE.MeshBasicMaterial).color.set(player && target ? "green" : "red");
-
-                if (player) {
-                    debugRef.current.position.copy(player.position).add(new THREE.Vector3(0, 3, 0));
-                }
-            }
-        }
 
         // Beam Logic
         if (!meshRef.current) return;
@@ -441,12 +424,6 @@ export function LifeDrainBeam() {
             <mesh ref={meshRef} visible={false}>
                 <cylinderGeometry args={[0.1, 0.1, 1, 8]} />
                 <meshBasicMaterial color="#00ff00" transparent opacity={0.6} />
-            </mesh>
-
-            {/* Conditional Debug Sphere - Only visible when casting */}
-            <mesh ref={debugRef} visible={false}>
-                <sphereGeometry args={[0.5]} />
-                <meshBasicMaterial color="red" />
             </mesh>
         </group>
     );
